@@ -1,0 +1,195 @@
+@import "leaflet/dist/leaflet.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* GridGuard AI - Futuristic Dark Theme */
+    --background: 222 47% 5%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 40% 9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 7%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 180 100% 50%;
+    --primary-foreground: 222 47% 5%;
+    --primary-glow: 180 100% 65%;
+
+    --secondary: 217 32% 14%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 32% 12%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 270 95% 65%;
+    --accent-foreground: 222 47% 5%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --warning: 38 95% 55%;
+    --warning-foreground: 222 47% 5%;
+
+    --success: 142 76% 45%;
+    --success-foreground: 222 47% 5%;
+
+    --risk-high: 0 84% 60%;
+    --risk-medium: 38 95% 55%;
+    --risk-low: 142 76% 45%;
+
+    --border: 217 32% 18%;
+    --input: 217 32% 18%;
+    --ring: 180 100% 50%;
+
+    --radius: 0.875rem;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(180 100% 50%), hsl(200 100% 55%));
+    --gradient-accent: linear-gradient(135deg, hsl(270 95% 65%), hsl(180 100% 50%));
+    --gradient-danger: linear-gradient(135deg, hsl(0 84% 60%), hsl(20 90% 55%));
+    --gradient-hero: radial-gradient(ellipse at top, hsl(180 100% 50% / 0.15), transparent 60%),
+                     radial-gradient(ellipse at bottom right, hsl(270 95% 65% / 0.12), transparent 60%),
+                     linear-gradient(180deg, hsl(222 47% 5%), hsl(222 47% 7%));
+    --gradient-card: linear-gradient(135deg, hsl(222 40% 11% / 0.8), hsl(222 40% 8% / 0.6));
+
+    /* Shadows / Glows */
+    --shadow-glow: 0 0 40px hsl(180 100% 50% / 0.35);
+    --shadow-danger: 0 0 30px hsl(0 84% 60% / 0.45);
+    --shadow-card: 0 8px 32px hsl(222 47% 2% / 0.6);
+    --shadow-elegant: 0 10px 40px -10px hsl(180 100% 50% / 0.4);
+
+    /* Glass */
+    --glass-bg: hsl(222 40% 12% / 0.55);
+    --glass-border: hsl(180 100% 50% / 0.15);
+
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    --sidebar-background: 222 47% 7%;
+    --sidebar-foreground: 210 40% 95%;
+    --sidebar-primary: 180 100% 50%;
+    --sidebar-primary-foreground: 222 47% 5%;
+    --sidebar-accent: 217 32% 14%;
+    --sidebar-accent-foreground: 210 40% 95%;
+    --sidebar-border: 217 32% 18%;
+    --sidebar-ring: 180 100% 50%;
+  }
+
+  .dark {
+    /* same as root, app is dark-first */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body, #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background: var(--gradient-hero);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-card);
+  }
+
+  .glass-strong {
+    background: hsl(222 40% 10% / 0.85);
+    backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid hsl(180 100% 50% / 0.2);
+  }
+
+  .glow-primary {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .glow-danger {
+    box-shadow: var(--shadow-danger);
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(hsl(180 100% 50% / 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(180 100% 50% / 0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@layer utilities {
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  .animate-shimmer {
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px hsl(180 100% 50% / 0.4); }
+  50% { box-shadow: 0 0 40px hsl(180 100% 50% / 0.8); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Leaflet overrides for dark theme */
+.leaflet-container {
+  background: hsl(222 47% 7%) !important;
+  font-family: inherit;
+}
+.leaflet-tile {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.7);
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: hsl(222 40% 9%) !important;
+  color: hsl(210 40% 98%) !important;
+  border: 1px solid hsl(180 100% 50% / 0.3) !important;
+  box-shadow: 0 8px 32px hsl(180 100% 50% / 0.2) !important;
+}
+.leaflet-popup-content {
+  margin: 14px 18px !important;
+  font-size: 13px;
+}
+.leaflet-control-zoom a {
+  background: hsl(222 40% 9%) !important;
+  color: hsl(180 100% 50%) !important;
+  border-color: hsl(180 100% 50% / 0.3) !important;
+}
+.leaflet-control-attribution {
+  background: hsl(222 40% 9% / 0.8) !important;
+  color: hsl(215 20% 65%) !important;
+}
+.leaflet-control-attribution a { color: hsl(180 100% 60%) !important; }
