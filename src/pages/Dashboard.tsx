@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Zap,
@@ -11,6 +11,8 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
+  X,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -35,36 +37,113 @@ function Skeleton({ className = "" }: { className?: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Animated counter
+// Notification panel (bell dropdown)
 // ─────────────────────────────────────────────────────────────────────────────
-function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 0 }: {
-  value: number; prefix?: string; suffix?: string; decimals?: number;
+interface Notification {
+  id: string;
+  type: "error" | "warning" | "info";
+  title: string;
+  description: string;
+  time: Date;
+  read: boolean;
+}
+
+function NotificationPanel({
+  notifications,
+  onClose,
+  onMarkRead,
+  onClearAll,
+}: {
+  notifications: Notification[];
+  onClose: () => void;
+  onMarkRead: (id: string) => void;
+  onClearAll: () => void;
 }) {
-  const [display, setDisplay] = useState(0);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let start = 0;
-    const end = value;
-    if (start === end) return;
-    const duration = 600;
-    const step = 16;
-    const increment = (end - start) / (duration / step);
-    const timer = setInterval(() => {
-      start += increment;
-      if (start >= end) {
-        setDisplay(end);
-        clearInterval(timer);
-      } else {
-        setDisplay(start);
+    function handleClickOutside(e: MouseEvent) {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        onClose();
       }
-    }, step);
-    return () => clearInterval(timer);
-  }, [value]);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onClose]);
+
+  const colorMap = {
+    error: "text-destructive border-destructive/30 bg-destructive/10",
+    warning: "text-warning border-warning/30 bg-warning/10",
+    info: "text-primary border-primary/30 bg-primary/10",
+  };
 
   return (
-    <span>
-      {prefix}{display.toFixed(decimals)}{suffix}
-    </span>
+    <div
+      ref={panelRef}
+      className="absolute top-full right-0 mt-2 w-80 z-[500] glass-strong rounded-2xl border border-border/50 shadow-2xl overflow-hidden"
+    >
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+        <div className="font-semibold text-sm flex items-center gap-2">
+          <Bell className="w-4 h-4 text-primary" />
+          Notifications
+          {notifications.filter((n) => !n.read).length > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-destructive text-white">
+              {notifications.filter((n) => !n.read).length}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {notifications.length > 0 && (
+            <button
+              onClick={onClearAll}
+              className="text-[10px] text-muted-foreground hover:text-primary transition-colors"
+            >
+              Clear all
+            </button>
+          )}
+          <button onClick={onClose}>
+            <X className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+          </button>
+        </div>
+      </div>
+
+      <div className="max-h-80 overflow-y-auto">
+        {notifications.length === 0 ? (
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+            No notifications
+          </div>
+        ) : (
+          notifications.map((n) => (
+            <div
+              key={n.id}
+              onClick={() => onMarkRead(n.id)}
+              className={`px-4 py-3 border-b border-border/30 cursor-pointer hover:bg-secondary/30 transition-colors ${
+                !n.read ? "bg-secondary/20" : ""
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                <AlertCircle className={`w-4 h-4 mt-0.5 shrink-0 ${
+                  n.type === "error" ? "text-destructive" :
+                  n.type === "warning" ? "text-warning" : "text-primary"
+                }`} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold truncate">{n.title}</p>
+                    {!n.read && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                    {n.description}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">
+                    {n.time.toLocaleTimeString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -83,10 +162,25 @@ const Dashboard = () => {
   // Simulation state
   const [theftLevel, setTheftLevel] = useState(0);
   const [simRunning, setSimRunning] = useState(false);
+  // Key that changes after each simulation → forces GridMap to re-mount with new markers
+  const [mapKey, setMapKey] = useState(0);
 
   // UI state
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  // ── Helpers ──
+  const addNotification = useCallback((n: Omit<Notification, "id" | "time" | "read">) => {
+    const notif: Notification = {
+      ...n,
+      id: Date.now().toString(),
+      time: new Date(),
+      read: false,
+    };
+    setNotifications((prev) => [notif, ...prev].slice(0, 20)); // keep last 20
+  }, []);
 
   // ── Fetch baseline data ──
   const loadData = useCallback(async () => {
@@ -97,11 +191,12 @@ const Dashboard = () => {
       setData(result);
       setApiOnline(true);
       setLastUpdated(new Date());
-    } catch (err) {
+      setMapKey((k) => k + 1); // force map re-mount on fresh data
+    } catch {
       setApiOnline(false);
       setError("Cannot reach backend. Make sure the FastAPI server is running on port 8000.");
       toast.error("⚠️ Backend offline", {
-        description: "Start the API: python api.py",
+        description: "Run: python api.py in the HELIX HACK folder",
       });
     } finally {
       setLoading(false);
@@ -112,40 +207,71 @@ const Dashboard = () => {
     loadData();
   }, [loadData]);
 
-  // ── Alert on high-risk loads ──
+  // ── Fire notification + toast when data first loads ──
+  const initialLoadFired = useRef(false);
   useEffect(() => {
-    if (data) {
+    if (data && !initialLoadFired.current) {
+      initialLoadFired.current = true;
       const h = data.insights.top_5_houses[0];
-      if (h && data.insights.total_high_risk > 0) {
-        toast.error(`🚨 ${data.insights.total_high_risk} High-Risk Houses Detected`, {
-          description: `Top suspect: House #${h.house_id} — ${h.reason.primary} (score: ${h.risk_score}/100)`,
+      if (h) {
+        const msg = `${data.insights.total_high_risk} High-Risk Houses Detected`;
+        const desc = `Top suspect: House #${h.house_id} — ${h.reason.primary} (score: ${h.risk_score}/100)`;
+
+        // Show toast
+        toast.error(`🚨 ${msg}`, { description: desc });
+
+        // Add to notification panel
+        addNotification({ type: "error", title: `🚨 ${msg}`, description: desc });
+
+        // Add zone notification
+        addNotification({
+          type: "info",
+          title: "ML Analysis Complete",
+          description: `${data.houses.length} houses scanned · Zone: ${data.transformer.status} · Loss: ₹${data.insights.estimated_loss.toFixed(2)}`,
         });
       }
     }
-  }, [data?.insights.total_high_risk]);
+  }, [data, addNotification]);
 
   // ── Derived / memoized values ──
-  const hotspots = useMemo(() => data ? detectHotspots(data.houses) : [], [data]);
-  const timeSeries = useMemo(() => data ? generateTimeSeries(data) : [], [data]);
-  const timeline = useMemo(() => data ? generateAnomalyTimeline(data.houses) : [], [data]);
+  const hotspots = useMemo(() => (data ? detectHotspots(data.houses) : []), [data]);
+  const timeSeries = useMemo(() => (data ? generateTimeSeries(data) : []), [data]);
+  const timeline = useMemo(() => (data ? generateAnomalyTimeline(data.houses) : []), [data]);
 
   // ── Run simulation ──
   const handleRunSimulation = async () => {
     if (!apiOnline) {
-      toast.error("Backend is offline");
+      toast.error("Backend is offline — start python api.py");
+      return;
+    }
+    if (theftLevel === 0) {
+      toast.warning("⚠️ Set theft level above 0% first using the slider");
       return;
     }
     setSimRunning(true);
-    toast.info("⚙️ Running theft increase simulation...");
+    toast.loading(`⚙️ Simulating +${theftLevel}% theft increase...`, { id: "sim" });
     try {
       const result = await runSimulation(theftLevel);
       setData(result);
       setLastUpdated(new Date());
-      toast.success(`✅ Simulation done — theft +${theftLevel}% applied`, {
-        description: `High risk houses: ${result.insights.total_high_risk} | Loss: ₹${result.insights.estimated_loss.toFixed(2)}`,
+      setMapKey((k) => k + 1); // ← KEY FIX: forces GridMap full re-mount so new marker colors appear
+
+      const newHigh = result.insights.total_high_risk;
+      const prevHigh = data?.insights.total_high_risk ?? 0;
+      const newlyHigh = newHigh - prevHigh;
+
+      toast.success(`✅ Simulation complete — +${theftLevel}% theft applied`, {
+        id: "sim",
+        description: `High risk: ${newHigh} houses (+${Math.max(0, newlyHigh)} new) · Loss: ₹${result.insights.estimated_loss.toFixed(2)} · Zone: ${result.transformer.status}`,
+      });
+
+      addNotification({
+        type: newlyHigh > 0 ? "error" : "warning",
+        title: `Simulation +${theftLevel}%: Zone now ${result.transformer.status}`,
+        description: `${newHigh} high-risk houses · Est. loss ₹${result.insights.estimated_loss.toFixed(2)} · ${newlyHigh > 0 ? `${newlyHigh} newly flagged` : "Risk scores elevated"}`,
       });
     } catch {
-      toast.error("Simulation failed. Is the API running?");
+      toast.error("Simulation failed — is the API running?", { id: "sim" });
     } finally {
       setSimRunning(false);
     }
@@ -155,13 +281,22 @@ const Dashboard = () => {
   const handleReset = async () => {
     setTheftLevel(0);
     setSelectedId(null);
+    toast.info("🔄 Resetting to ML baseline...");
     await loadData();
-    toast.info("🔄 Grid reset to ML baseline.");
+    initialLoadFired.current = false; // allow reload notification
+    addNotification({
+      type: "info",
+      title: "Grid Reset",
+      description: "Restored to original ML baseline data",
+    });
   };
 
   // ── Download CSV report ──
   const downloadReport = () => {
-    if (!data) return;
+    if (!data) {
+      toast.warning("No data available to download");
+      return;
+    }
     const lines = [
       "Electricity Theft Detection Report — GridGuard AI",
       `Generated: ${new Date().toLocaleString()}`,
@@ -184,8 +319,26 @@ const Dashboard = () => {
     a.download = `theft-detection-report-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("📄 Report downloaded.");
+    toast.success("📄 Report downloaded successfully");
   };
+
+  // ── Bell button: toggle notification panel ──
+  const handleBellClick = () => {
+    setShowNotifications((v) => !v);
+  };
+
+  const handleMarkRead = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
+
+  const handleClearAll = () => {
+    setNotifications([]);
+    setShowNotifications(false);
+  };
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   // ─────────────────────────────────────────────
   // Render: Error / Loading
@@ -199,7 +352,7 @@ const Dashboard = () => {
           <p className="text-muted-foreground text-sm">{error}</p>
           <div className="bg-secondary/40 rounded-xl p-3 text-xs font-mono text-left">
             <div className="text-muted-foreground">Run in terminal:</div>
-            <div className="text-primary mt-1">pip install fastapi uvicorn</div>
+            <div className="text-primary mt-1">cd "HELIX HACK"</div>
             <div className="text-primary">python api.py</div>
           </div>
           <Button onClick={loadData} className="w-full bg-gradient-primary">
@@ -240,7 +393,12 @@ const Dashboard = () => {
           icon: Gauge,
           label: "Zone Status",
           value: data.transformer.status,
-          color: data.transformer.status === "Normal" ? "text-success" : "text-destructive",
+          color:
+            data.transformer.status === "Normal"
+              ? "text-success"
+              : data.transformer.status === "Warning"
+              ? "text-warning"
+              : "text-destructive",
         },
       ]
     : [];
@@ -270,9 +428,9 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* API status */}
+            {/* API status indicator */}
             <div
-              className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs ${
+              className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs cursor-default ${
                 apiOnline
                   ? "bg-success/10 border-success/30 text-success"
                   : "bg-destructive/10 border-destructive/30 text-destructive"
@@ -280,6 +438,7 @@ const Dashboard = () => {
             >
               {apiOnline ? (
                 <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                   <Wifi className="w-3 h-3" />
                   <span className="font-medium">API Online</span>
                 </>
@@ -297,21 +456,56 @@ const Dashboard = () => {
               </div>
             )}
 
-            <Button variant="outline" size="sm" onClick={loadData} className="border-primary/30" disabled={loading}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadData}
+              className="border-primary/30"
+              disabled={loading}
+              title="Refresh data from ML backend"
+            >
               <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button variant="outline" size="sm" onClick={downloadReport} className="border-primary/30" disabled={!data}>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={downloadReport}
+              className="border-primary/30"
+              disabled={!data}
+              title="Download CSV report"
+            >
               <Download className="w-3.5 h-3.5 mr-1.5" /> Report
             </Button>
-            <Button variant="outline" size="icon" className="relative border-primary/30">
-              <Bell className="w-4 h-4" />
-              {data && data.insights.total_high_risk > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 text-[10px] font-bold rounded-full bg-destructive text-destructive-foreground flex items-center justify-center">
-                  {data.insights.total_high_risk}
-                </span>
+
+            {/* Bell notification button */}
+            <div className="relative">
+              <Button
+                variant="outline"
+                size="icon"
+                className="relative border-primary/30"
+                onClick={handleBellClick}
+                title="View notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 text-[10px] font-bold rounded-full bg-destructive text-destructive-foreground flex items-center justify-center animate-pulse">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </Button>
+
+              {/* Notification dropdown panel */}
+              {showNotifications && (
+                <NotificationPanel
+                  notifications={notifications}
+                  onClose={() => setShowNotifications(false)}
+                  onMarkRead={handleMarkRead}
+                  onClearAll={handleClearAll}
+                />
               )}
-            </Button>
+            </div>
           </div>
         </div>
 
@@ -322,7 +516,7 @@ const Dashboard = () => {
             : stats.map((s) => (
                 <div
                   key={s.label}
-                  className="flex items-center gap-3 rounded-xl bg-secondary/40 border border-border/50 px-3 py-2"
+                  className="flex items-center gap-3 rounded-xl bg-secondary/40 border border-border/50 px-3 py-2 transition-all hover:border-primary/30"
                 >
                   <s.icon className={`w-4 h-4 ${s.color}`} />
                   <div>
@@ -344,7 +538,10 @@ const Dashboard = () => {
             {loading || !data ? (
               <Skeleton className="w-full h-full" />
             ) : (
+              // key={mapKey} forces a full re-mount every time simulation runs
+              // This guarantees Leaflet markers re-render with new colors
               <GridMap
+                key={mapKey}
                 houses={data.houses}
                 transformer={data.transformer}
                 hotspots={hotspots}
@@ -353,20 +550,23 @@ const Dashboard = () => {
               />
             )}
 
-            {/* Legend */}
+            {/* Risk legend */}
             {data && (
               <div className="absolute bottom-4 left-4 z-[400] glass-strong rounded-xl px-3 py-2 text-xs space-y-1">
                 <div className="font-semibold text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
                   Risk Levels
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-risk-high" /> High ({data.houses.filter((h) => h.risk_level === "high").length})
+                  <span className="w-2.5 h-2.5 rounded-full bg-risk-high animate-pulse" />
+                  High ({data.houses.filter((h) => h.risk_level === "high").length})
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-risk-medium" /> Medium ({data.houses.filter((h) => h.risk_level === "medium").length})
+                  <span className="w-2.5 h-2.5 rounded-full bg-risk-medium" />
+                  Medium ({data.houses.filter((h) => h.risk_level === "medium").length})
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-risk-low" /> Low ({data.houses.filter((h) => h.risk_level === "low").length})
+                  <span className="w-2.5 h-2.5 rounded-full bg-risk-low" />
+                  Low ({data.houses.filter((h) => h.risk_level === "low").length})
                 </div>
                 {hotspots.length > 0 && (
                   <div className="flex items-center gap-2 pt-1 border-t border-border/50">
@@ -374,6 +574,19 @@ const Dashboard = () => {
                     Clusters ({hotspots.length})
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Simulation mode badge */}
+            {data && theftLevel > 0 && (
+              <div className="absolute top-4 right-4 z-[400]">
+                <div className={`px-3 py-1.5 rounded-full text-xs font-bold border ${
+                  theftLevel >= 30
+                    ? "bg-destructive/20 border-destructive/50 text-destructive"
+                    : "bg-warning/20 border-warning/50 text-warning"
+                } animate-pulse`}>
+                  ⚡ SIM +{theftLevel}% Active
+                </div>
               </div>
             )}
           </div>
@@ -398,7 +611,11 @@ const Dashboard = () => {
                 </div>
                 <AlertTriangle className="w-4 h-4 text-warning" />
               </div>
-              {loading ? <Skeleton className="h-[220px]" /> : data && <RiskDistributionChart houses={data.houses} />}
+              {loading ? (
+                <Skeleton className="h-[220px]" />
+              ) : (
+                data && <RiskDistributionChart houses={data.houses} />
+              )}
             </div>
           </div>
         </section>
@@ -421,7 +638,10 @@ const Dashboard = () => {
                 houses={data.houses}
                 estimatedLoss={data.insights.estimated_loss}
                 totalHighRisk={data.insights.total_high_risk}
-                onSelect={setSelectedId}
+                onSelect={(id) => {
+                  setSelectedId(id);
+                  toast.info(`📍 Flying to House #${id} on map`);
+                }}
               />
             )
           )}
